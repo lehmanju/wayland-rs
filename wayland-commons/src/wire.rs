@@ -331,7 +331,7 @@ impl Message {
                                 tail = rest;
                                 match CStr::from_bytes_with_nul(v) {
                                     Ok(s) => Ok(Argument::Str(Box::new(s.into()))),
-                                    Err(_) => 
+                                    Err(e) => 
                                     {
                                         println!("Second occurrence, {}", e);
                                         Err(MessageParseError::Malformed)
