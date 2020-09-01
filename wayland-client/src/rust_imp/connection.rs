@@ -65,10 +65,24 @@ impl Connection {
         // read messages
         let ret = self.socket.read_messages(
             |id, opcode| {
-                map.borrow()
-                    .find(id)
-                    .and_then(|o| o.events.get(opcode as usize))
-                    .map(|desc| desc.signature)
+                let object = match map.borrow().find(id) {
+                    Some(result) => result,
+                    None => {
+                        println!("Failed to find {:?}", id);
+                        return None;
+                    }
+                };
+
+                let result = object.events.get(opcode as usize).map(|desc| desc.signature);
+
+                if result.is_none() {
+                    println!(
+                        "Can't get signature. opcode: {:?}, events: {:?}",
+                        opcode as usize, object.events
+                    );
+                }
+
+                result
             },
             |msg| {
                 let mut map = map.borrow_mut();
