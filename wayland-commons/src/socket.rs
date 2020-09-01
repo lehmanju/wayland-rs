@@ -262,7 +262,7 @@ impl BufferedSocket {
                 }
             } else {
                 // no signature found ?
-                println!("Socket malformed signature?");
+                println!("Socket malformed signature? opcode {}", opcode);
                 return Err(MessageParseError::Malformed);
             }
         };
