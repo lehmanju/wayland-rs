@@ -302,6 +302,7 @@ impl Message {
         let len = (word_2 >> 16) as usize / 4;
 
         if len < 2 || len > raw.len() {
+            println!("First ocurrence, len {}, rawlen {}", len, raw.len());
             return Err(MessageParseError::Malformed);
         }
 
@@ -330,7 +331,11 @@ impl Message {
                                 tail = rest;
                                 match CStr::from_bytes_with_nul(v) {
                                     Ok(s) => Ok(Argument::Str(Box::new(s.into()))),
-                                    Err(_) => Err(MessageParseError::Malformed),
+                                    Err(_) => 
+                                    {
+                                        println!("Second occurrence, {}", e);
+                                        Err(MessageParseError::Malformed)
+                                    },
                                 }
                             }),
                         ArgumentType::Object => Ok(Argument::Object(front)),
