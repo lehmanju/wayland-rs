@@ -262,6 +262,7 @@ impl BufferedSocket {
                 }
             } else {
                 // no signature found ?
+                println!("Socket malformed signature?");
                 return Err(MessageParseError::Malformed);
             }
         };
@@ -334,6 +335,7 @@ impl BufferedSocket {
 
             if let Some(MessageParseError::Malformed) = err {
                 // early stop here
+                println!("Socket other malformed");
                 return Ok(Err(MessageParseError::Malformed));
             }
 
