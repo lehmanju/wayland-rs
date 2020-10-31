@@ -11,7 +11,11 @@ use crate::event_queue::QueueToken;
 
 use crate::imp::ProxyInner;
 
-use futures::{executor, future::ready};
+use futures::{
+    executor,
+    future::{ready, LocalFutureObj},
+    task::{LocalSpawn, Spawn},
+};
 use futures_signals::signal::{Mutable, Signal, SignalExt, SignalFuture};
 use wayland_commons::{filter::Filter, MessageGroup};
 
@@ -227,22 +231,6 @@ pub struct Main<I: Interface + AsRef<Proxy<I>> + From<Proxy<I>>> {
     inner: Attached<I>,
 }
 
-struct FutureWrapper<F>
-where
-    F: Future,
-{
-    future: F,
-}
-
-impl<F> FutureWrapper<F>
-where
-    F: Future<Output = ()>,
-{
-    fn block(&self) {
-        executor::block_on(self.future)
-    }
-}
-
 impl<I: Interface> Main<I>
 where
     I: AsRef<Proxy<I>> + From<Proxy<I>>,
@@ -291,19 +279,19 @@ where
         self.assign(Filter::new(move |(proxy, event), _, data| f(proxy, event, data)))
     }
 
-    pub fn assign_future<S>(
-        &self,
-        signal: Mutable<I::Event>,
-        future: impl Future<Output = ()> + 'static,
-    ) where
+    pub fn assign_future<S>(&self, signal: Mutable<I::Event>, future: LocalFutureObj<'static, ()>)
+    where
         I: Interface + AsRef<Proxy<I>> + From<Proxy<I>> + Sync,
         I::Event: MessageGroup<Map = crate::ProxyMap>,
     {
-        let rc = Rc::new(RefCell::new(FutureWrapper { future }));
+        let localPool = executor::LocalPool::new();
+        let localSpawner = Box::new(localPool.spawner());
+        localSpawner.spawn_local_obj(future);
+        let rc = Rc::new(RefCell::new(localPool));
         self.assign(Filter::new(move |(_, event), _, _| {
             let mut lock = signal.lock_mut();
             *lock = event;
-            rc.borrow_mut().block()
+            rc.borrow_mut().run()
         }));
     }
 }
