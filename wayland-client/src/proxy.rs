@@ -1,5 +1,5 @@
 use std::fmt::{self, Debug, Formatter};
-use std::ops::Deref;
+use std::{cell::RefCell, future::Future, ops::Deref, rc::Rc};
 
 use super::AnonymousObject;
 use wayland_commons::user_data::UserData;
@@ -11,6 +11,8 @@ use crate::event_queue::QueueToken;
 
 use crate::imp::ProxyInner;
 
+use futures::{executor, future::ready};
+use futures_signals::signal::{Mutable, Signal, SignalExt, SignalFuture};
 use wayland_commons::{filter::Filter, MessageGroup};
 
 /// An handle to a wayland proxy
@@ -225,6 +227,22 @@ pub struct Main<I: Interface + AsRef<Proxy<I>> + From<Proxy<I>>> {
     inner: Attached<I>,
 }
 
+struct FutureWrapper<F>
+where
+    F: Future,
+{
+    future: F,
+}
+
+impl<F> FutureWrapper<F>
+where
+    F: Future<Output = ()>,
+{
+    fn block(&self) {
+        executor::block_on(self.future)
+    }
+}
+
 impl<I: Interface> Main<I>
 where
     I: AsRef<Proxy<I>> + From<Proxy<I>>,
@@ -271,6 +289,22 @@ where
         I::Event: MessageGroup<Map = crate::ProxyMap>,
     {
         self.assign(Filter::new(move |(proxy, event), _, data| f(proxy, event, data)))
+    }
+
+    pub fn assign_future<S>(
+        &self,
+        signal: Mutable<I::Event>,
+        future: impl Future<Output = ()> + 'static,
+    ) where
+        I: Interface + AsRef<Proxy<I>> + From<Proxy<I>> + Sync,
+        I::Event: MessageGroup<Map = crate::ProxyMap>,
+    {
+        let rc = Rc::new(RefCell::new(FutureWrapper { future }));
+        self.assign(Filter::new(move |(_, event), _, _| {
+            let mut lock = signal.lock_mut();
+            *lock = event;
+            rc.borrow_mut().block()
+        }));
     }
 }
 
